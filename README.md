@@ -19,6 +19,8 @@ Renders the CPG as an interactive node-edge graph.
 - Click the descriptor title (top-left) → shows descriptor metadata
 - **Load JSON** button — paste a JSON to rebuild the graph
 
+![Provenance Graph](https://raw.githubusercontent.com/compprov/compprov-render/master/screenshots/graph.png)
+
 ### `plot.html` — Provenance Plot
 
 Plots numeric variable values across one or more datasets for side-by-side comparison.
@@ -31,6 +33,8 @@ Plots numeric variable values across one or more datasets for side-by-side compa
 - Click any field name in the detail panel → sets that field as the global display label (reflected in the Data tab and chart tooltips)
 - **Apply labels to X-axis** button — applies current display labels as X-axis slot names
 - Each dataset gets its own color; multiple datasets can be compared on the same chart
+
+![Plot View](https://raw.githubusercontent.com/compprov/compprov-render/master/screenshots/plot.png)
 
 ---
 
