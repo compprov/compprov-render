@@ -1,0 +1,154 @@
+{
+  "descriptor" : {
+    "name" : "Mult VS Add",
+    "meta" : {
+      "Description" : "Another one example",
+      "Creation date" : "2026-03-14"
+    }
+  },
+  "variables" : [ {
+    "track" : {
+      "id" : "i_1",
+      "numericId" : 1,
+      "createdAt" : "2026-03-14T03:43:04.0542622Z",
+      "kind" : "INPUT",
+      "descriptor" : {
+        "name" : "mc",
+        "meta" : { }
+      },
+      "valueClass" : "java.math.MathContext"
+    },
+    "value" : {
+      "precision" : 3,
+      "roundingMode" : "DOWN"
+    }
+  }, {
+    "track" : {
+      "id" : "i_2",
+      "numericId" : 2,
+      "createdAt" : "2026-03-14T03:43:04.0572623Z",
+      "kind" : "INPUT",
+      "descriptor" : {
+        "name" : "x",
+        "meta" : { }
+      },
+      "valueClass" : "java.math.BigDecimal"
+    },
+    "value" : 3
+  }, {
+    "track" : {
+      "id" : "i_3",
+      "numericId" : 3,
+      "createdAt" : "2026-03-14T03:43:04.0592632Z",
+      "kind" : "INPUT",
+      "descriptor" : {
+        "name" : "y",
+        "meta" : { }
+      },
+      "valueClass" : "java.math.BigDecimal"
+    },
+    "value" : 4
+  }, {
+    "track" : {
+      "id" : "o_4",
+      "numericId" : 4,
+      "createdAt" : "2026-03-14T03:43:04.0602626Z",
+      "kind" : "OUTPUT",
+      "descriptor" : {
+        "name" : "o_4",
+        "meta" : { }
+      },
+      "valueClass" : "java.math.BigDecimal"
+    },
+    "value" : 7
+  }, {
+    "track" : {
+      "id" : "o_5",
+      "numericId" : 5,
+      "createdAt" : "2026-03-14T03:43:04.0612637Z",
+      "kind" : "OUTPUT",
+      "descriptor" : {
+        "name" : "o_5",
+        "meta" : { }
+      },
+      "valueClass" : "java.math.BigDecimal"
+    },
+    "value" : 12
+  }, {
+    "track" : {
+      "id" : "o_6",
+      "numericId" : 6,
+      "createdAt" : "2026-03-14T03:43:04.0612637Z",
+      "kind" : "OUTPUT",
+      "descriptor" : {
+        "name" : "result",
+        "meta" : {
+          "Formula" : "(a*b)-(a+b)"
+        }
+      },
+      "valueClass" : "java.math.BigDecimal"
+    },
+    "value" : 5
+  } ],
+  "operations" : [ {
+    "track" : {
+      "id" : "op_1",
+      "numericId" : 1,
+      "startedAt" : "2026-03-14T03:43:04.0592632Z",
+      "finishedAt" : "2026-03-14T03:43:04.0602626Z",
+      "descriptor" : {
+        "name" : "add",
+        "meta" : {
+          "formula" : "(a+b)mc"
+        }
+      },
+      "wrapperClass" : "io.compprov.core.wrappers.WrappedBigDecimal"
+    },
+    "arguments" : {
+      "a" : "i_2",
+      "b" : "i_3",
+      "mc" : "i_1"
+    },
+    "resultId" : "o_4"
+  }, {
+    "track" : {
+      "id" : "op_2",
+      "numericId" : 2,
+      "startedAt" : "2026-03-14T03:43:04.0612637Z",
+      "finishedAt" : "2026-03-14T03:43:04.0612637Z",
+      "descriptor" : {
+        "name" : "multiply",
+        "meta" : {
+          "formula" : "(a*b)mc"
+        }
+      },
+      "wrapperClass" : "io.compprov.core.wrappers.WrappedBigDecimal"
+    },
+    "arguments" : {
+      "a" : "i_2",
+      "b" : "i_3",
+      "mc" : "i_1"
+    },
+    "resultId" : "o_5"
+  }, {
+    "track" : {
+      "id" : "op_3",
+      "numericId" : 3,
+      "startedAt" : "2026-03-14T03:43:04.0612637Z",
+      "finishedAt" : "2026-03-14T03:43:04.0612637Z",
+      "descriptor" : {
+        "name" : "subtract",
+        "meta" : {
+          "formula" : "(a-b)mc"
+        }
+      },
+      "wrapperClass" : "io.compprov.core.wrappers.WrappedBigDecimal"
+    },
+    "arguments" : {
+      "a" : "o_5",
+      "b" : "o_4",
+      "mc" : "i_1"
+    },
+    "resultId" : "o_6"
+  } ]
+}

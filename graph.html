@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CompProv Graph Viewer</title>
+  <script src="lib/jquery.min.js"></script>
+  <script src="lib/vis-network.min.js"></script>
+  <link rel="stylesheet" href="lib/vis-network.min.css"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── top row: graph + sidebar ── */
+    #top {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #graph-wrap {
+      flex: 1;
+      position: relative;
+      min-width: 0;
+    }
+
+    #graph {
+      width: 100%;
+      height: 100%;
+    }
+
+    #graph-title {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(24,24,37,0.88);
+      padding: 5px 14px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #a6e3a1;
+      border: 1px solid #313244;
+      z-index: 10;
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    #graph-title:hover {
+      border-color: #a6e3a1;
+      color: #cdd6f4;
+    }
+
+    /* ── sidebar ── */
+    #sidebar {
+      width: 264px;
+      flex-shrink: 0;
+      background: #181825;
+      border-left: 1px solid #313244;
+      overflow-y: auto;
+      padding: 14px 12px 20px;
+    }
+
+    #sidebar > h2 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: #cba6f7;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #313244;
+      margin-bottom: 4px;
+    }
+
+    #btn-load-json {
+      display: block;
+      width: 100%;
+      margin-bottom: 14px;
+      padding: 7px 10px;
+      background: #313244;
+      border: 1px solid #45475a;
+      border-radius: 6px;
+      color: #cdd6f4;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      letter-spacing: .02em;
+      transition: background .15s, border-color .15s;
+    }
+    #btn-load-json:hover {
+      background: #45475a;
+      border-color: #89b4fa;
+      color: #89b4fa;
+    }
+    #btn-load-json::before {
+      content: '{ }';
+      font-family: monospace;
+      margin-right: 8px;
+      color: #89b4fa;
+    }
+
+    /* ── modal ── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal-overlay.open { display: flex; }
+
+    #modal {
+      background: #1e1e2e;
+      border: 1px solid #45475a;
+      border-radius: 10px;
+      width: 640px;
+      max-width: 94vw;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      overflow: hidden;
+    }
+
+    #modal-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid #313244;
+      gap: 10px;
+    }
+    #modal-header h3 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #cdd6f4;
+      flex: 1;
+    }
+    #modal-close-x {
+      background: none;
+      border: none;
+      color: #6c7086;
+      font-size: 18px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    #modal-close-x:hover { color: #cdd6f4; }
+
+    #modal-body { padding: 14px 16px; }
+
+    #modal-body label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #6c7086;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 7px;
+    }
+
+    #json-input {
+      width: 100%;
+      height: 320px;
+      background: #11111b;
+      border: 1px solid #313244;
+      border-radius: 6px;
+      color: #cdd6f4;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 10px 12px;
+      resize: vertical;
+      outline: none;
+      transition: border-color .15s;
+    }
+    #json-input:focus { border-color: #89b4fa; }
+    #json-input.error { border-color: #f38ba8; }
+
+    #modal-error {
+      margin-top: 7px;
+      font-size: 11px;
+      color: #f38ba8;
+      font-family: monospace;
+      min-height: 16px;
+    }
+
+    #modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #313244;
+    }
+
+    .modal-btn {
+      padding: 7px 20px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background .15s;
+    }
+    #modal-cancel {
+      background: #313244;
+      border-color: #45475a;
+      color: #a6adc8;
+    }
+    #modal-cancel:hover { background: #45475a; }
+    #modal-ok {
+      background: #89b4fa;
+      color: #1e1e2e;
+    }
+    #modal-ok:hover { background: #b4d0fe; }
+
+    .sec-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #a6adc8;
+      margin: 14px 0 6px;
+    }
+
+    .sec-badge {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .badge-input  { background: #4fc3f7; }
+    .badge-output { background: #81c784; }
+    .badge-op     { background: #ffb74d; transform: rotate(45deg); border-radius: 1px; }
+
+    .chk-row {
+      display: flex;
+      align-items: center;
+      padding: 3px 5px;
+      border-radius: 5px;
+      cursor: pointer;
+      gap: 7px;
+    }
+    .chk-row:hover { background: #313244; }
+
+    .chk-row input[type=checkbox] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 13px;
+      height: 13px;
+      border: 1px solid #585b70;
+      border-radius: 3px;
+      background: #1e1e2e;
+      flex-shrink: 0;
+      cursor: pointer;
+      position: relative;
+    }
+    .chk-row input[type=checkbox]:checked {
+      background: #89b4fa;
+      border-color: #89b4fa;
+    }
+    .chk-row input[type=checkbox]:checked::after {
+      content: '';
+      position: absolute;
+      left: 2px; top: 0px;
+      width: 5px; height: 8px;
+      border: 2px solid #1e1e2e;
+      border-top: none; border-left: none;
+      transform: rotate(45deg);
+    }
+
+    .chk-label { font-size: 12px; color: #cdd6f4; user-select: none; flex: 1; }
+    .chk-hint  { font-size: 10px; color: #585b70; font-style: italic; }
+
+    .legend {
+      margin-top: 18px;
+      border-top: 1px solid #313244;
+      padding-top: 12px;
+      font-size: 11px;
+      color: #6c7086;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .leg-row { display: flex; align-items: center; gap: 8px; }
+    .leg-shape { width: 14px; height: 14px; flex-shrink: 0; }
+    .ls-ellipse { background:#4fc3f7; border:1px solid #0288d1; border-radius:50%; }
+    .ls-box     { background:#81c784; border:1px solid #388e3c; border-radius:2px; }
+    .ls-diamond {
+      background:#ffb74d; border:1px solid #e65100;
+      width:12px; height:12px;
+      transform:rotate(45deg); border-radius:1px;
+    }
+
+    /* ── bottom info panel ── */
+    #info-panel {
+      flex-shrink: 0;
+      background: #181825;
+      border-top: 1px solid #313244;
+      overflow: hidden;
+      height: 0;
+      transition: height .25s ease;
+    }
+    #info-panel.open { height: 200px; }
+
+    #info-inner {
+      height: 200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #info-bar {
+      display: flex;
+      align-items: center;
+      padding: 6px 14px;
+      border-bottom: 1px solid #313244;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    #info-type-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #313244;
+      color: #cdd6f4;
+    }
+    #info-type-badge.t-input  { background: #0277bd; color: #e1f5fe; }
+    #info-type-badge.t-output { background: #2e7d32; color: #e8f5e9; }
+    #info-type-badge.t-op     { background: #e65100; color: #fff3e0; }
+
+    #info-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #cdd6f4;
+      font-family: monospace;
+    }
+
+    #info-close {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: #6c7086;
+      font-size: 18px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    #info-close:hover { color: #cdd6f4; }
+
+    #info-body {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: auto;
+      padding: 8px 14px 10px;
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .info-col { display: flex; flex-direction: column; gap: 4px; }
+
+    .info-kv {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .info-k {
+      color: #89b4fa;
+      font-family: monospace;
+      min-width: 110px;
+      flex-shrink: 0;
+    }
+    .info-v {
+      color: #cdd6f4;
+      font-family: monospace;
+    }
+    .info-v.muted { color: #6c7086; }
+
+    .info-sub-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #585b70;
+      letter-spacing: .08em;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="top">
+  <div id="graph-wrap">
+    <div id="graph-title">CompProv Graph Viewer</div>
+    <div id="graph"></div>
+  </div>
+
+  <div id="sidebar">
+    <button id="btn-load-json">Load JSON</button>
+    <h2>Display Options</h2>
+
+    <!-- INPUT variable -->
+    <div class="sec-head">
+      <span class="sec-badge badge-input"></span>Input Variable
+    </div>
+    <label class="chk-row"><input type="checkbox" class="f-input" value="id" checked><span class="chk-label">id</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-input" value="numericId"><span class="chk-label">numericId</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-input" value="name"><span class="chk-label">name</span><span class="chk-hint">descriptor</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-input" value="valueClass"><span class="chk-label">valueClass</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-input" value="value"><span class="chk-label">value</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-input" value="createdAt"><span class="chk-label">createdAt</span></label>
+
+    <!-- OUTPUT variable -->
+    <div class="sec-head">
+      <span class="sec-badge badge-output"></span>Output Variable
+    </div>
+    <label class="chk-row"><input type="checkbox" class="f-output" value="id" checked><span class="chk-label">id</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-output" value="numericId"><span class="chk-label">numericId</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-output" value="name"><span class="chk-label">name</span><span class="chk-hint">descriptor</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-output" value="valueClass"><span class="chk-label">valueClass</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-output" value="value"><span class="chk-label">value</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-output" value="createdAt"><span class="chk-label">createdAt</span></label>
+
+    <!-- OPERATION -->
+    <div class="sec-head">
+      <span class="sec-badge badge-op"></span>Operation
+    </div>
+    <label class="chk-row"><input type="checkbox" class="f-op" value="id" checked><span class="chk-label">id</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-op" value="numericId"><span class="chk-label">numericId</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-op" value="name" checked><span class="chk-label">name</span><span class="chk-hint">descriptor</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-op" value="formula"><span class="chk-label">formula</span><span class="chk-hint">meta</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-op" value="wrapperClass"><span class="chk-label">wrapperClass</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-op" value="startedAt"><span class="chk-label">startedAt</span></label>
+    <label class="chk-row"><input type="checkbox" class="f-op" value="finishedAt"><span class="chk-label">finishedAt</span></label>
+
+    <div class="legend">
+      <div class="leg-row"><div class="leg-shape ls-ellipse"></div><span>Input variable</span></div>
+      <div class="leg-row"><div class="leg-shape ls-box"></div><span>Output variable</span></div>
+      <div class="leg-row"><div class="leg-shape ls-diamond"></div><span>Operation</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-header">
+      <h3>Load JSON</h3>
+      <button id="modal-close-x">×</button>
+    </div>
+    <div id="modal-body">
+      <label>Paste computation JSON</label>
+      <textarea id="json-input" spellcheck="false" placeholder='{ "descriptor": {...}, "variables": [...], "operations": [...] }'></textarea>
+      <div id="modal-error"></div>
+    </div>
+    <div id="modal-footer">
+      <button class="modal-btn" id="modal-cancel">Cancel</button>
+      <button class="modal-btn" id="modal-ok">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- bottom info panel -->
+<div id="info-panel">
+  <div id="info-inner">
+    <div id="info-bar">
+      <span id="info-type-badge">—</span>
+      <span id="info-title">—</span>
+      <button id="info-close">×</button>
+    </div>
+    <div id="info-body"></div>
+  </div>
+</div>
+
+<script>
+$(function () {
+
+  // ── inline data (examples/input1.json) ───────────────────────────────────
+  const DATA = {"descriptor":{"name":"test","meta":{}},"variables":[{"track":{"id":"i_1","numericId":1,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"mc","meta":{}},"valueClass":"java.math.MathContext"},"value":{"precision":3,"roundingMode":"DOWN"}},{"track":{"id":"i_2","numericId":2,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"x","meta":{}},"valueClass":"java.math.BigDecimal"},"value":1},{"track":{"id":"i_3","numericId":3,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"y","meta":{}},"valueClass":"java.math.BigDecimal"},"value":2},{"track":{"id":"o_4","numericId":4,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"OUTPUT","descriptor":{"name":"o_4","meta":{}},"valueClass":"java.math.BigDecimal"},"value":3},{"track":{"id":"o_5","numericId":5,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"OUTPUT","descriptor":{"name":"result","meta":{}},"valueClass":"java.math.BigDecimal"},"value":-2}],"operations":[{"track":{"id":"op_1","numericId":1,"startedAt":"2026-03-14T02:09:32.1850532Z","finishedAt":"2026-03-14T02:09:32.1850532Z","descriptor":{"name":"add","meta":{"formula":"(a+b)mc"}},"wrapperClass":"io.compprov.core.wrappers.WrappedBigDecimal"},"arguments":{"a":"i_2","b":"i_3","mc":"i_1"},"resultId":"o_4"},{"track":{"id":"op_2","numericId":2,"startedAt":"2026-03-14T02:09:32.1850532Z","finishedAt":"2026-03-14T02:09:32.1850532Z","descriptor":{"name":"subtract","meta":{"formula":"(a-b)mc"}},"wrapperClass":"io.compprov.core.wrappers.WrappedBigDecimal"},"arguments":{"a":"i_2","b":"o_4","mc":"i_1"},"resultId":"o_5"}]};
+
+  // ── state ─────────────────────────────────────────────────────────────────
+  let nodesDS, edgesDS, network;
+
+  // lookup maps built once
+  const varById = {};
+  DATA.variables.forEach(v => { varById[v.track.id] = v; });
+  const opById  = {};
+  DATA.operations.forEach(op => { opById[op.track.id] = op; });
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+  function shortClass(s) {
+    if (!s) return '';
+    return s.split('.').pop();
+  }
+
+  function shortDate(s) {
+    if (!s) return '';
+    return s.replace('T', ' ').replace(/\.\d+Z$/, ' Z');
+  }
+
+  function fields(cls) {
+    return $('.' + cls + ':checked').map(function () { return this.value; }).get();
+  }
+
+  // ── label builders ────────────────────────────────────────────────────────
+  function varLabel(v, flds) {
+    const lines = [];
+    flds.forEach(function (f) {
+      if (f === 'id')         lines.push(v.track.id);
+      else if (f === 'numericId')  lines.push('#' + v.track.numericId);
+      else if (f === 'name')       lines.push(v.track.descriptor.name);
+      else if (f === 'valueClass') lines.push(shortClass(v.track.valueClass));
+      else if (f === 'value') {
+        var val = (typeof v.value === 'object') ? JSON.stringify(v.value) : String(v.value);
+        lines.push('= ' + val);
+      }
+      else if (f === 'createdAt')  lines.push(shortDate(v.track.createdAt));
+    });
+    return lines.length ? lines.join('\n') : v.track.id;
+  }
+
+  function opLabel(op, flds) {
+    const lines = [];
+    flds.forEach(function (f) {
+      if (f === 'id')           lines.push(op.track.id);
+      else if (f === 'numericId')    lines.push('#' + op.track.numericId);
+      else if (f === 'name')         lines.push(op.track.descriptor.name);
+      else if (f === 'formula') {
+        var fm = op.track.descriptor.meta && op.track.descriptor.meta.formula;
+        if (fm) lines.push(fm);
+      }
+      else if (f === 'wrapperClass') lines.push(shortClass(op.track.wrapperClass));
+      else if (f === 'startedAt')    lines.push(shortDate(op.track.startedAt));
+      else if (f === 'finishedAt')   lines.push(shortDate(op.track.finishedAt));
+    });
+    return lines.length ? lines.join('\n') : op.track.descriptor.name;
+  }
+
+  // ── build datasets ────────────────────────────────────────────────────────
+  function buildDatasets() {
+    var fi = fields('f-input');
+    var fo = fields('f-output');
+    var fop = fields('f-op');
+
+    var nodes = [];
+
+    DATA.variables.forEach(function (v) {
+      var isInput = v.track.kind === 'INPUT';
+      nodes.push({
+        id:    v.track.id,
+        label: varLabel(v, isInput ? fi : fo),
+        group: isInput ? 'input' : 'output',
+        _kind: 'variable',
+        _ref:  v
+      });
+    });
+
+    DATA.operations.forEach(function (op) {
+      nodes.push({
+        id:    op.track.id,
+        label: opLabel(op, fop),
+        group: 'operation',
+        _kind: 'operation',
+        _ref:  op
+      });
+    });
+
+    var edges = [];
+
+    DATA.operations.forEach(function (op) {
+      // argument variables → operation node
+      Object.keys(op.arguments).forEach(function (argKey) {
+        var varId = op.arguments[argKey];
+        edges.push({
+          from:  varId,
+          to:    op.track.id,
+          label: argKey,
+          font:  { color: '#a6adc8', size: 10, align: 'middle', strokeWidth: 2, strokeColor: '#1e1e2e' },
+          color: { color: '#585b70', highlight: '#89b4fa', hover: '#89b4fa' },
+          arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+          dashes: true,
+          width: 1.2,
+          smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 }
+        });
+      });
+
+      // operation node → result (output) variable
+      edges.push({
+        from:  op.track.id,
+        to:    op.resultId,
+        label: '',
+        color: { color: '#f38ba8', highlight: '#ff6b6b', hover: '#ff8787' },
+        arrows: { to: { enabled: true, scaleFactor: 0.8 } },
+        width: 1.8,
+        smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 }
+      });
+    });
+
+    return { nodes: nodes, edges: edges };
+  }
+
+  // ── init network ──────────────────────────────────────────────────────────
+  function initNetwork(nodes, edges) {
+    nodesDS = new vis.DataSet(nodes);
+    edgesDS = new vis.DataSet(edges);
+
+    var options = {
+      groups: {
+        input: {
+          shape: 'ellipse',
+          color: { background: '#4fc3f7', border: '#0288d1', highlight: { background: '#81d4fa', border: '#01579b' } },
+          font:  { color: '#002233', size: 13, face: 'monospace', multi: false },
+          widthConstraint: { minimum: 60 }
+        },
+        output: {
+          shape: 'box',
+          color: { background: '#81c784', border: '#388e3c', highlight: { background: '#a5d6a7', border: '#1b5e20' } },
+          font:  { color: '#002200', size: 13, face: 'monospace', multi: false },
+          widthConstraint: { minimum: 60 }
+        },
+        operation: {
+          shape: 'diamond',
+          color: { background: '#ffb74d', border: '#e65100', highlight: { background: '#ffd54f', border: '#bf360c' } },
+          font:  { color: '#ffffff', size: 13, face: 'monospace', multi: false },
+          widthConstraint: { minimum: 80 }
+        }
+      },
+      layout: {
+        hierarchical: {
+          enabled: true,
+          direction: 'LR',
+          sortMethod: 'directed',
+          levelSeparation: 200,
+          nodeSpacing: 110,
+          treeSpacing: 140,
+          blockShifting: true,
+          edgeMinimization: true,
+          parentCentralization: true
+        }
+      },
+      physics: { enabled: false },
+      interaction: {
+        hover: true,
+        tooltipDelay: 150,
+        navigationButtons: false,
+        keyboard: false,
+        zoomView: true,
+        dragView: true
+      },
+      nodes: { borderWidth: 2, borderWidthSelected: 3, shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 8 } },
+      edges: { selectionWidth: 2.5, shadow: false }
+    };
+
+    var container = document.getElementById('graph');
+    network = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, options);
+
+    network.on('click', function (params) {
+      if (params.nodes.length === 1) {
+        showInfo(params.nodes[0]);
+      }
+    });
+
+    network.on('deselectNode', function () {
+      closeInfo();
+    });
+  }
+
+  // ── refresh labels on checkbox change ────────────────────────────────────
+  function refreshLabels() {
+    if (!nodesDS) return;
+    var fi  = fields('f-input');
+    var fo  = fields('f-output');
+    var fop = fields('f-op');
+    var updates = [];
+    nodesDS.forEach(function (n) {
+      if (n._kind === 'variable') {
+        var isInput = n._ref.track.kind === 'INPUT';
+        updates.push({ id: n.id, label: varLabel(n._ref, isInput ? fi : fo) });
+      } else {
+        updates.push({ id: n.id, label: opLabel(n._ref, fop) });
+      }
+    });
+    nodesDS.update(updates);
+  }
+
+  // ── info panel ────────────────────────────────────────────────────────────
+  function kv(k, v, muted) {
+    return '<div class="info-kv"><span class="info-k">' + k + '</span>'
+         + '<span class="info-v' + (muted ? ' muted' : '') + '">' + v + '</span></div>';
+  }
+
+  function showInfo(nodeId) {
+    var node = nodesDS.get(nodeId);
+    var badge = $('#info-type-badge').removeClass('t-input t-output t-op');
+    var html = '';
+
+    if (node._kind === 'variable') {
+      var v = node._ref;
+      var isInput = v.track.kind === 'INPUT';
+      badge.text(isInput ? 'Input Variable' : 'Output Variable')
+           .addClass(isInput ? 't-input' : 't-output');
+      $('#info-title').text(v.track.id);
+
+      var col1 = '<div class="info-col">'
+        + kv('id',          v.track.id)
+        + kv('numericId',   v.track.numericId)
+        + kv('kind',        v.track.kind)
+        + kv('name',        v.track.descriptor.name)
+        + '</div>';
+
+      var valStr = (typeof v.value === 'object') ? JSON.stringify(v.value) : String(v.value);
+      var col2 = '<div class="info-col">'
+        + kv('valueClass',  shortClass(v.track.valueClass))
+        + kv('value',       valStr)
+        + kv('createdAt',   shortDate(v.track.createdAt))
+        + '</div>';
+
+      var metaKeys = Object.keys(v.track.descriptor.meta || {});
+      var col3 = '';
+      if (metaKeys.length) {
+        col3 = '<div class="info-col"><div class="info-sub-title">descriptor meta</div>';
+        metaKeys.forEach(function (k) { col3 += kv(k, v.track.descriptor.meta[k]); });
+        col3 += '</div>';
+      }
+
+      html = col1 + col2 + col3;
+
+    } else {
+      var op = node._ref;
+      badge.text('Operation').addClass('t-op');
+      $('#info-title').text(op.track.id + '  —  ' + op.track.descriptor.name);
+
+      var col1 = '<div class="info-col">'
+        + kv('id',           op.track.id)
+        + kv('numericId',    op.track.numericId)
+        + kv('name',         op.track.descriptor.name)
+        + kv('wrapperClass', shortClass(op.track.wrapperClass))
+        + '</div>';
+
+      var formula = op.track.descriptor.meta && op.track.descriptor.meta.formula;
+      var col2 = '<div class="info-col">'
+        + (formula ? kv('formula', formula) : '')
+        + kv('startedAt',  shortDate(op.track.startedAt))
+        + kv('finishedAt', shortDate(op.track.finishedAt))
+        + kv('resultId',   op.resultId)
+        + '</div>';
+
+      var col3 = '<div class="info-col"><div class="info-sub-title">arguments</div>';
+      Object.keys(op.arguments).forEach(function (ak) {
+        col3 += kv(ak, op.arguments[ak]);
+      });
+      col3 += '</div>';
+
+      html = col1 + col2 + col3;
+    }
+
+    $('#info-body').html(html);
+    $('#info-panel').addClass('open');
+  }
+
+  function closeInfo() {
+    $('#info-panel').removeClass('open');
+    network && network.unselectAll();
+  }
+
+  function showDescriptorInfo() {
+    var d = DATA.descriptor;
+    $('#info-type-badge').removeClass('t-input t-output t-op').text('Descriptor');
+    $('#info-title').text(d.name || '—');
+
+    var col1 = '<div class="info-col">'
+      + kv('name', d.name || '—')
+      + '</div>';
+
+    var metaKeys = Object.keys(d.meta || {});
+    var col2 = '';
+    if (metaKeys.length) {
+      col2 = '<div class="info-col"><div class="info-sub-title">meta</div>';
+      metaKeys.forEach(function (k) { col2 += kv(k, d.meta[k]); });
+      col2 += '</div>';
+    } else {
+      col2 = '<div class="info-col">' + kv('meta', '(empty)', true) + '</div>';
+    }
+
+    $('#info-body').html(col1 + col2);
+    $('#info-panel').addClass('open');
+  }
+
+  $('#info-close').on('click', closeInfo);
+  $('#graph-title').on('click', showDescriptorInfo);
+
+  // ── checkbox listeners ────────────────────────────────────────────────────
+  $(document).on('change', '.f-input, .f-output, .f-op', refreshLabels);
+
+  // ── load json modal ───────────────────────────────────────────────────────
+  function openModal() {
+    $('#json-input').val('').removeClass('error');
+    $('#modal-error').text('');
+    $('#modal-overlay').addClass('open');
+    setTimeout(function () { $('#json-input').focus(); }, 50);
+  }
+
+  function closeModal() {
+    $('#modal-overlay').removeClass('open');
+  }
+
+  function applyJson() {
+    var raw = $('#json-input').val().trim();
+    var parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      $('#json-input').addClass('error');
+      $('#modal-error').text('Invalid JSON: ' + e.message);
+      return;
+    }
+    if (!parsed.variables || !parsed.operations) {
+      $('#json-input').addClass('error');
+      $('#modal-error').text('Missing required fields: "variables" and/or "operations"');
+      return;
+    }
+
+    // rebuild lookup maps
+    Object.keys(varById).forEach(function (k) { delete varById[k]; });
+    Object.keys(opById).forEach(function (k) { delete opById[k]; });
+    parsed.variables.forEach(function (v) { varById[v.track.id] = v; });
+    parsed.operations.forEach(function (op) { opById[op.track.id] = op; });
+
+    // swap DATA contents in-place so all references stay valid
+    DATA.descriptor = parsed.descriptor || { name: 'untitled', meta: {} };
+    DATA.variables   = parsed.variables;
+    DATA.operations  = parsed.operations;
+
+    closeInfo();
+    closeModal();
+
+    var ds = buildDatasets();
+    nodesDS.clear();
+    edgesDS.clear();
+    nodesDS.add(ds.nodes);
+    edgesDS.add(ds.edges);
+    network.fit();
+
+    $('#graph-title').text('Graph: ' + (DATA.descriptor.name || 'untitled'));
+  }
+
+  $('#btn-load-json').on('click', openModal);
+  $('#modal-close-x, #modal-cancel').on('click', closeModal);
+  $('#modal-ok').on('click', applyJson);
+
+  // close on overlay click (outside modal box)
+  $('#modal-overlay').on('click', function (e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Ctrl+Enter to apply
+  $('#json-input').on('keydown', function (e) {
+    if (e.ctrlKey && e.key === 'Enter') applyJson();
+    $('#json-input').removeClass('error');
+    $('#modal-error').text('');
+  });
+
+  // ── boot ──────────────────────────────────────────────────────────────────
+  var ds = buildDatasets();
+  initNetwork(ds.nodes, ds.edges);
+  $('#graph-title').text('Graph: ' + (DATA.descriptor.name || 'untitled'));
+
+});
+</script>
+</body>
+</html>

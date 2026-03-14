@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CompProv Plot</title>
+  <script src="lib/jquery.min.js"></script>
+  <script src="lib/chart.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── header ── */
+    #header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 18px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+    }
+    #header h1 { font-size: 14px; font-weight: 700; color: #cba6f7; letter-spacing: .06em; }
+
+    /* ── plot-type selector ── */
+    #plot-type-bar {
+      display: flex;
+      background: #252535;
+      border: 1px solid #313244;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .pt-btn {
+      padding: 5px 13px;
+      background: none;
+      border: none;
+      border-right: 1px solid #313244;
+      color: #6c7086;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: .03em;
+      transition: background .12s, color .12s;
+    }
+    .pt-btn:last-child { border-right: none; }
+    .pt-btn:hover { background: #313244; color: #cdd6f4; }
+    .pt-btn.active { background: #313244; color: #89b4fa; }
+
+    /* ── main ── */
+    #main { flex: 1; display: flex; min-height: 0; }
+
+    /* ── chart ── */
+    #chart-wrap { flex: 1; padding: 20px 24px 16px; min-width: 0; position: relative; overflow: auto; }
+    #chart { cursor: default; }
+    #chart-empty {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; color: #313244; pointer-events: none;
+    }
+
+    /* ── table view ── */
+    #table-wrap { display: none; }
+    #data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    #data-table th, #data-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid #313244;
+      text-align: right;
+    }
+    #data-table th {
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      border-bottom: 2px solid #45475a;
+      white-space: nowrap;
+    }
+    #data-table td.dt-label {
+      text-align: left;
+      color: #a6adc8;
+      font-family: monospace;
+    }
+    #data-table th.dt-label-hd {
+      text-align: left;
+      color: #585b70;
+    }
+    #data-table td.dt-val { font-family: monospace; color: #cdd6f4; }
+    #data-table tr:hover td { background: #252535; }
+
+    /* ── right panel ── */
+    #right-panel {
+      width: 250px;
+      flex-shrink: 0;
+      background: #181825;
+      border-left: 1px solid #313244;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* tabs */
+    #tab-bar {
+      flex-shrink: 0;
+      display: flex;
+      border-bottom: 1px solid #313244;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 0;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #6c7086;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: .04em;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: #cdd6f4; }
+    .tab-btn.active { color: #89b4fa; border-bottom-color: #89b4fa; }
+
+    /* tab contents */
+    .tab-pane {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .tab-pane.active { display: flex; }
+
+    /* shared panel header */
+    .pane-header {
+      flex-shrink: 0;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid #313244;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: #585b70;
+    }
+
+    /* scrollable body */
+    .pane-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 8px 8px;
+    }
+
+    /* pane footer (buttons) */
+    .pane-footer {
+      flex-shrink: 0;
+      padding: 8px 10px;
+      border-top: 1px solid #313244;
+    }
+
+    /* ── generic action button ── */
+    .act-btn {
+      display: block;
+      width: 100%;
+      padding: 7px 10px;
+      background: #313244;
+      border: 1px solid #45475a;
+      border-radius: 6px;
+      color: #cdd6f4;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      letter-spacing: .02em;
+      transition: background .15s, border-color .15s;
+    }
+    .act-btn:hover { background: #45475a; border-color: #89b4fa; color: #89b4fa; }
+    .act-btn.icon-json::before { content: '{ } '; font-family: monospace; color: #89b4fa; }
+    .act-btn.icon-plus::before { content: '+ '; color: #a6e3a1; }
+
+    /* ── X-axis item rows ── */
+    .xitem-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 4px;
+      border-radius: 5px;
+      margin-bottom: 2px;
+      border: 1px solid transparent;
+      transition: background .1s;
+    }
+    .xitem-row:hover { background: #252535; border-color: #313244; }
+    .xitem-row.slot-hidden { opacity: .45; }
+    .xitem-row.drag-over-before { border-top: 2px solid #89b4fa; margin-top: -1px; }
+    .xitem-row.drag-over-after  { border-bottom: 2px solid #89b4fa; margin-bottom: -1px; }
+    .xitem-row.dragging { opacity: .3; }
+
+    .drag-handle {
+      cursor: grab;
+      color: #45475a;
+      font-size: 13px;
+      padding: 0 2px;
+      flex-shrink: 0;
+      user-select: none;
+      line-height: 1;
+    }
+    .drag-handle:hover { color: #a6adc8; }
+
+    /* shared checkbox style for both panes */
+    .slot-chk {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 13px;
+      height: 13px;
+      border: 1px solid #585b70;
+      border-radius: 3px;
+      background: #1e1e2e;
+      flex-shrink: 0;
+      cursor: pointer;
+      position: relative;
+    }
+    .slot-chk:checked { background: #89b4fa; border-color: #89b4fa; }
+    .slot-chk:checked::after {
+      content: '';
+      position: absolute;
+      left: 2px; top: 0;
+      width: 5px; height: 8px;
+      border: 2px solid #1e1e2e;
+      border-top: none; border-left: none;
+      transform: rotate(45deg);
+    }
+
+    .xitem-label {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .xitem-display {
+      font-size: 12px;
+      color: #cdd6f4;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .xitem-display:hover { color: #89b4fa; text-decoration: underline dotted; }
+    .xitem-varid {
+      font-size: 10px;
+      color: #45475a;
+      font-family: monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .xitem-edit {
+      font-size: 12px;
+      background: #11111b;
+      border: 1px solid #89b4fa;
+      border-radius: 3px;
+      color: #cdd6f4;
+      padding: 2px 6px;
+      width: 100%;
+      outline: none;
+    }
+
+    /* drag indicator for dv-rows in data tab */
+    .dv-row.drag-over-before { border-top: 2px solid #89b4fa; margin-top: -1px; }
+    .dv-row.drag-over-after  { border-bottom: 2px solid #89b4fa; margin-bottom: -1px; }
+    .dv-row.dragging { opacity: .3; }
+
+
+    /* ── dataset cards ── */
+    .ds-card {
+      border: 1px solid #313244;
+      border-radius: 7px;
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .ds-card.expanded { border-color: #45475a; }
+
+    .ds-card-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 9px;
+      cursor: pointer;
+      user-select: none;
+      background: #252535;
+      transition: background .12s;
+    }
+    .ds-card-head:hover { background: #2d2d40; }
+    .ds-card.expanded .ds-card-head { background: #1e2040; }
+
+    .ds-color-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .ds-card-name { flex: 1; font-size: 12px; font-weight: 600; color: #cdd6f4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ds-card-info { font-size: 10px; color: #6c7086; white-space: nowrap; }
+    .ds-card-expand { font-size: 10px; color: #45475a; flex-shrink: 0; transition: transform .15s; }
+    .ds-card.expanded .ds-card-expand { transform: rotate(90deg); }
+    .ds-card-rm {
+      background: none; border: none;
+      color: #45475a; font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1;
+    }
+    .ds-card-rm:hover { color: #f38ba8; }
+
+    .ds-card-vars { display: none; padding: 5px 7px 7px; }
+    .ds-card.expanded .ds-card-vars { display: block; }
+
+    /* variable rows inside dataset card */
+    .dv-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 4px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+    }
+    .dv-row:hover { background: #252535; border-color: #313244; }
+    .dv-row.non-numeric { opacity: .35; }
+
+    .dv-kind-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+    .dv-name {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .dv-id { font-family: monospace; font-size: 11px; color: #89b4fa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dv-val { font-size: 10px; color: #6c7086; font-family: monospace; }
+
+    .dv-xpos {
+      font-size: 10px;
+      color: #45475a;
+      font-family: monospace;
+      flex-shrink: 0;
+      min-width: 20px;
+      text-align: right;
+    }
+
+    /* up/down */
+    .mv-btns { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+    .mv-btns button {
+      width: 16px; height: 11px;
+      background: #252535; border: none; border-radius: 2px;
+      color: #585b70; font-size: 7px; cursor: pointer; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .mv-btns button:hover:not(:disabled) { background: #45475a; color: #cdd6f4; }
+    .mv-btns button:disabled { cursor: default; opacity: .2; }
+
+    /* ── info panel ── */
+    #info-panel {
+      flex-shrink: 0;
+      background: #181825;
+      border-top: 1px solid #313244;
+      overflow: hidden;
+      height: 0;
+      transition: height .25s ease;
+    }
+    #info-panel.open { height: 180px; }
+    #info-inner { height: 180px; display: flex; flex-direction: column; }
+
+    #info-bar {
+      display: flex;
+      align-items: center;
+      padding: 6px 14px;
+      border-bottom: 1px solid #313244;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    #info-ds-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #info-ds-name { font-size: 11px; color: #6c7086; }
+    #info-type-badge {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; padding: 2px 8px; border-radius: 4px;
+      background: #313244; color: #cdd6f4;
+    }
+    #info-type-badge.t-input  { background: #0277bd; color: #e1f5fe; }
+    #info-type-badge.t-output { background: #2e7d32; color: #e8f5e9; }
+    #info-title { font-size: 13px; font-weight: 700; color: #cdd6f4; font-family: monospace; }
+    #info-close {
+      margin-left: auto; background: none; border: none;
+      color: #6c7086; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1;
+    }
+    #info-close:hover { color: #cdd6f4; }
+
+    #info-body {
+      flex: 1; overflow-x: auto; overflow-y: auto;
+      padding: 8px 14px 10px;
+      display: flex; gap: 20px; align-items: flex-start;
+    }
+    .info-col { display: flex; flex-direction: column; gap: 4px; }
+    .info-kv  { display: flex; align-items: baseline; gap: 8px; font-size: 12px; white-space: nowrap; }
+    .info-k   { color: #89b4fa; font-family: monospace; min-width: 100px; flex-shrink: 0; cursor: pointer; }
+    .info-k:hover { color: #cba6f7; text-decoration: underline dotted; }
+    .info-v   { color: #cdd6f4; font-family: monospace; }
+    .info-v.muted { color: #6c7086; }
+    .info-sub-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #585b70; letter-spacing: .08em; margin-top: 4px; }
+
+    /* ── modal ── */
+    #modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.65); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    #modal-overlay.open { display: flex; }
+    #modal {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 10px;
+      width: 620px; max-width: 94vw;
+      display: flex; flex-direction: column;
+      box-shadow: 0 10px 48px rgba(0,0,0,.7); overflow: hidden;
+    }
+    #modal-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #313244; }
+    #modal-header h3 { flex: 1; font-size: 13px; font-weight: 700; color: #cdd6f4; }
+    #modal-close-x { background: none; border: none; color: #6c7086; font-size: 18px; cursor: pointer; padding: 0 3px; }
+    #modal-close-x:hover { color: #cdd6f4; }
+    #modal-body { padding: 14px 16px; }
+    #modal-body > label { display: block; font-size: 11px; font-weight: 600; color: #6c7086; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+    #json-input {
+      width: 100%; height: 300px;
+      background: #11111b; border: 1px solid #313244; border-radius: 6px;
+      color: #cdd6f4; font-family: monospace; font-size: 12px;
+      padding: 10px 12px; resize: vertical; outline: none;
+      transition: border-color .15s;
+    }
+    #json-input:focus { border-color: #89b4fa; }
+    #json-input.error { border-color: #f38ba8; }
+    #modal-error { margin-top: 6px; font-size: 11px; color: #f38ba8; font-family: monospace; min-height: 15px; }
+    #modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #313244; }
+    .modal-btn { padding: 7px 18px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+    #modal-cancel { background: #313244; border-color: #45475a; color: #a6adc8; }
+    #modal-cancel:hover { background: #45475a; }
+    #modal-ok { background: #89b4fa; color: #1e1e2e; }
+    #modal-ok:hover { background: #b4d0fe; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>CompProv Plot</h1>
+  <div id="plot-type-bar">
+    <button class="pt-btn active" data-type="points">Points</button>
+    <button class="pt-btn"        data-type="line">Line</button>
+    <button class="pt-btn"        data-type="table">Table</button>
+  </div>
+</div>
+
+<div id="main">
+  <div id="chart-wrap">
+    <canvas id="chart"></canvas>
+    <div id="chart-empty">Load a JSON to display the plot</div>
+    <div id="table-wrap"></div>
+  </div>
+
+  <div id="right-panel">
+    <div id="tab-bar">
+      <button class="tab-btn active" data-tab="plot">Plot</button>
+      <button class="tab-btn"        data-tab="data">Data</button>
+    </div>
+
+    <!-- ── Plot tab ── -->
+    <div id="tab-plot" class="tab-pane active">
+      <div class="pane-header">X-axis items</div>
+      <div class="pane-body">
+        <div id="xaxis-list"></div>
+      </div>
+      <div class="pane-footer">
+        <button class="act-btn icon-plus" id="btn-add-var">Add variable</button>
+      </div>
+    </div>
+
+    <!-- ── Data tab ── -->
+    <div id="tab-data" class="tab-pane">
+      <div class="pane-header">Loaded datasets</div>
+      <div class="pane-body">
+        <div id="ds-list"></div>
+      </div>
+      <div class="pane-footer" style="display:flex;flex-direction:column;gap:6px;">
+        <button class="act-btn icon-json" id="btn-load-json">Load JSON</button>
+        <button class="act-btn" id="btn-override-xaxis">&#8635; Apply labels to X-axis</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- info panel -->
+<div id="info-panel">
+  <div id="info-inner">
+    <div id="info-bar">
+      <div id="info-ds-dot"></div>
+      <span id="info-ds-name"></span>
+      <span id="info-type-badge"></span>
+      <span id="info-title"></span>
+      <button id="info-close">×</button>
+    </div>
+    <div id="info-body"></div>
+  </div>
+</div>
+
+<!-- modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-header">
+      <h3>Load JSON</h3>
+      <button id="modal-close-x">×</button>
+    </div>
+    <div id="modal-body">
+      <label>Paste computation JSON</label>
+      <textarea id="json-input" spellcheck="false" placeholder='{ "descriptor": {...}, "variables": [...], "operations": [...] }'></textarea>
+      <div id="modal-error"></div>
+    </div>
+    <div id="modal-footer">
+      <button class="modal-btn" id="modal-cancel">Cancel</button>
+      <button class="modal-btn" id="modal-ok">Add Dataset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+$(function () {
+
+  var PALETTE = ['#4fc3f7', '#ffb74d', '#f48fb1', '#a5d6a7', '#ce93d8', '#80deea', '#fff176', '#ff8a65'];
+
+  // ── state ─────────────────────────────────────────────────────────────────
+  // xAxis: ordered list of { id: varId, label: string }
+  //        defines which variables appear on X axis and their display labels
+  // datasets: list of { uid, name, color, vars: [{id,kind,name,value,numeric}] }
+  //           vars is ordered; that order mirrors xAxis (synced on reorder)
+  var state = {
+    xAxis:        [],
+    datasets:     [],
+    expanded:     null,   // uid of expanded dataset card
+    uidCounter:   0,
+    chartInst:    null,
+    displayField: null,   // field name used as display label; null = 'id'
+    plotType:     'points' // 'points' | 'line' | 'table'
+  };
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+  function isNumeric(v) {
+    return typeof v === 'number' ||
+           (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)));
+  }
+
+  function getDs(uid) {
+    for (var i = 0; i < state.datasets.length; i++) {
+      if (state.datasets[i].uid === uid) return state.datasets[i];
+    }
+    return null;
+  }
+
+  function swapArr(arr, i, j) {
+    var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  }
+
+  function getDisplayLabel(v) {
+    var f = state.displayField;
+    if (!f || f === 'id')         return v.id;
+    if (f === 'numericId')        return String(v.numericId);
+    if (f === 'kind')             return v.kind;
+    if (f === 'name')             return v.name;
+    if (f === 'value')            return String(v.value);
+    if (f === 'valueClass')       return shortClass(v.valueClass);
+    if (f === 'createdAt')        return shortDate(v.createdAt);
+    if (v.meta && v.meta[f] !== undefined) return String(v.meta[f]);
+    return v.id;
+  }
+
+  function xAxisIndexOf(varId) {
+    for (var i = 0; i < state.xAxis.length; i++) {
+      if (state.xAxis[i].id === varId) return i;
+    }
+    return -1;
+  }
+
+  // ── Dataset: reorder variable within a dataset (positional mapping shifts) ─
+  function moveDatasetVar(uid, varIdx, dir) {
+    var ds = getDs(uid);
+    if (!ds) return;
+    var newIdx = varIdx + dir;
+    if (newIdx < 0 || newIdx >= ds.vars.length) return;
+    swapArr(ds.vars, varIdx, newIdx);
+    update();
+  }
+
+  // ── add dataset ───────────────────────────────────────────────────────────
+  function addDataset(json) {
+    var uid   = ++state.uidCounter;
+    var color = PALETTE[(state.datasets.length) % PALETTE.length];
+
+    var vars = (json.variables || []).map(function (v) {
+      return {
+        id:         v.track.id,
+        numericId:  v.track.numericId,
+        kind:       v.track.kind,
+        name:       v.track.descriptor.name,
+        valueClass: v.track.valueClass,
+        createdAt:  v.track.createdAt,
+        meta:       v.track.descriptor.meta || {},
+        value:      v.value,
+        numeric:    isNumeric(v.value)
+      };
+    });
+
+    // extend xAxis positionally: add a slot for each numeric var beyond current length
+    var numericVars = vars.filter(function (v) { return v.numeric; });
+    for (var i = state.xAxis.length; i < numericVars.length; i++) {
+      state.xAxis.push({ label: numericVars[i].id, hidden: false });
+    }
+
+    state.datasets.push({
+      uid:  uid,
+      name: (json.descriptor && json.descriptor.name) || ('Dataset ' + uid),
+      color: color,
+      vars:  vars
+    });
+
+    state.expanded = uid;
+    update();
+  }
+
+  // ── remove dataset ────────────────────────────────────────────────────────
+  function removeDataset(uid) {
+    state.datasets = state.datasets.filter(function (d) { return d.uid !== uid; });
+    if (state.expanded === uid) {
+      state.expanded = state.datasets.length ? state.datasets[0].uid : null;
+    }
+    update();
+  }
+
+  // ── X-axis: rename label ──────────────────────────────────────────────────
+  function startXRename(idx, $row) {
+    var current = state.xAxis[idx].label;
+    var $disp = $row.find('.xitem-display');
+    var $inp  = $('<input class="xitem-edit">').val(current);
+    $disp.replaceWith($inp);
+    $inp.focus().select();
+
+    function commit() {
+      var val = $inp.val().trim() || state.xAxis[idx].id;
+      state.xAxis[idx].label = val;
+      var $newDisp = $('<span class="xitem-display" title="Click to rename">').text(val);
+      $newDisp.on('click', function () { startXRename(idx, $row); });
+      $inp.replaceWith($newDisp);
+      renderChart();
+    }
+    $inp.on('blur', commit).on('keydown', function (e) {
+      if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { $inp.val(current); commit(); }
+    });
+  }
+
+  // ── X-axis: move item (plot config only, datasets unaffected) ────────────
+  function moveXItem(idx, dir) {
+    var newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= state.xAxis.length) return;
+    swapArr(state.xAxis, idx, newIdx);
+    update();
+  }
+
+  // ── X-axis: remove item ───────────────────────────────────────────────────
+  function removeXItem(idx) {
+    state.xAxis.splice(idx, 1);
+    update();
+  }
+
+  // ── X-axis: add slot ──────────────────────────────────────────────────────
+  function addXItem() {
+    state.xAxis.push({ label: 'slot ' + (state.xAxis.length + 1), hidden: false });
+    update();
+  }
+
+  // ── Dataset: reorder dataset cards (no effect on plot config) ───────────
+  function moveDataset(uid, dir) {
+    var idx = -1;
+    for (var i = 0; i < state.datasets.length; i++) {
+      if (state.datasets[i].uid === uid) { idx = i; break; }
+    }
+    var newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= state.datasets.length) return;
+    swapArr(state.datasets, idx, newIdx);
+    update();
+  }
+
+  // ── info panel ───────────────────────────────────────────────────────────
+  function kv(k, v, muted) {
+    return '<div class="info-kv"><span class="info-k" title="Double-click to use as slot label">' + k + '</span>'
+         + '<span class="info-v' + (muted ? ' muted' : '') + '">' + $('<span>').text(String(v)).html() + '</span></div>';
+  }
+
+  function shortClass(s) {
+    return s ? s.split('.').pop() : '';
+  }
+
+  function shortDate(s) {
+    return s ? s.replace('T', ' ').replace(/\.\d+Z$/, ' Z') : '';
+  }
+
+  function showPointInfo(ds, v) {
+    infoPanelCtx.ds = ds;
+    infoPanelCtx.v  = v;
+    var isInput = v.kind === 'INPUT';
+    $('#info-ds-dot').css('background', ds.color);
+    $('#info-ds-name').text(ds.name);
+    $('#info-type-badge')
+      .removeClass('t-input t-output')
+      .addClass(isInput ? 't-input' : 't-output')
+      .text(isInput ? 'Input Variable' : 'Output Variable');
+    $('#info-title').text(v.id);
+
+    var col1 = '<div class="info-col">'
+      + kv('id',        v.id)
+      + kv('numericId', v.numericId)
+      + kv('kind',      v.kind)
+      + kv('name',      v.name)
+      + '</div>';
+
+    var valStr = (typeof v.value === 'object' && v.value !== null)
+      ? JSON.stringify(v.value) : String(v.value);
+    var col2 = '<div class="info-col">'
+      + kv('value',      valStr)
+      + kv('valueClass', shortClass(v.valueClass))
+      + kv('createdAt',  shortDate(v.createdAt))
+      + '</div>';
+
+    var metaKeys = Object.keys(v.meta || {});
+    var col3 = '';
+    if (metaKeys.length) {
+      col3 = '<div class="info-col"><div class="info-sub-title">meta</div>';
+      metaKeys.forEach(function (k) { col3 += kv(k, v.meta[k]); });
+      col3 += '</div>';
+    }
+
+    $('#info-body').html(col1 + col2 + col3);
+    $('#info-panel').addClass('open');
+  }
+
+  function closeInfo() { $('#info-panel').removeClass('open'); }
+  $('#info-close').on('click', closeInfo);
+
+  // click a field name → apply that field as display label for all variables globally
+  $('#info-body').on('click', '.info-k', function () {
+    var field = $(this).text().trim();
+    if (!field) return;
+    state.displayField = field;
+    // rebuild xAxis labels using first dataset as reference
+    if (state.datasets.length) {
+      var refVars = state.datasets[0].vars.filter(function (v) { return v.numeric; });
+      state.xAxis.forEach(function (slot, i) {
+        if (refVars[i]) slot.label = getDisplayLabel(refVars[i]);
+      });
+    }
+    update();
+  });
+
+  // ── info panel context (current variable shown) ───────────────────────────
+  var infoPanelCtx = { ds: null, v: null };
+
+  // ── drag state ────────────────────────────────────────────────────────────
+  var dragSrcIdx = null;                        // for X-axis items
+  var dragVar = { uid: null, idx: null };        // for dataset variable rows
+
+  // ── render Plot tab ───────────────────────────────────────────────────────
+  function renderPlotTab() {
+    var $list = $('#xaxis-list').empty();
+
+    if (!state.xAxis.length) {
+      $list.append($('<div style="font-size:11px;color:#45475a;padding:8px 4px;">No items. Load a JSON first.</div>'));
+      return;
+    }
+
+    state.xAxis.forEach(function (item, idx) {
+      var $row = $('<div class="xitem-row">')
+        .toggleClass('slot-hidden', !!item.hidden)
+        .attr('draggable', 'true');
+
+      // drag handle
+      $row.append($('<span class="drag-handle" title="Drag to reorder">').text('⠿'));
+
+      // visibility checkbox
+      var $chk = $('<input type="checkbox" class="slot-chk" title="Show on plot">')
+        .prop('checked', !item.hidden);
+      $chk.on('change', function () {
+        state.xAxis[idx].hidden = !this.checked;
+        $row.toggleClass('slot-hidden', !this.checked);
+        renderChart();
+      });
+      $row.append($chk);
+
+      // label
+      var $lbl = $('<div class="xitem-label">');
+      var $disp = $('<span class="xitem-display" title="Click to rename">').text(item.label);
+      $disp.on('click', function () { startXRename(idx, $row); });
+      $lbl.append($disp);
+      $lbl.append($('<div class="xitem-varid">').text('slot ' + (idx + 1)));
+      $row.append($lbl);
+
+
+      // ── drag-and-drop events ──
+      $row.on('dragstart', (function (i) {
+        return function (e) {
+          dragSrcIdx = i;
+          e.originalEvent.dataTransfer.effectAllowed = 'move';
+          e.originalEvent.dataTransfer.setData('text/plain', i);
+          setTimeout(function () { $row.addClass('dragging'); }, 0);
+        };
+      })(idx));
+
+      $row.on('dragend', function () {
+        dragSrcIdx = null;
+        $('#xaxis-list .xitem-row').removeClass('dragging drag-over-before drag-over-after');
+      });
+
+      $row.on('dragover', (function (i) {
+        return function (e) {
+          e.preventDefault();
+          if (dragSrcIdx === null || dragSrcIdx === i) return;
+          e.originalEvent.dataTransfer.dropEffect = 'move';
+          $('#xaxis-list .xitem-row').removeClass('drag-over-before drag-over-after');
+          var rect = this.getBoundingClientRect();
+          var above = e.originalEvent.clientY < rect.top + rect.height / 2;
+          $(this).addClass(above ? 'drag-over-before' : 'drag-over-after');
+        };
+      })(idx));
+
+      $row.on('dragleave', function () {
+        $(this).removeClass('drag-over-before drag-over-after');
+      });
+
+      $row.on('drop', (function (i) {
+        return function (e) {
+          e.preventDefault();
+          $('#xaxis-list .xitem-row').removeClass('drag-over-before drag-over-after');
+          if (dragSrcIdx === null || dragSrcIdx === i) return;
+          var rect = this.getBoundingClientRect();
+          var above = e.originalEvent.clientY < rect.top + rect.height / 2;
+          var from = dragSrcIdx;
+          var to   = above ? i : i + 1;
+          if (from < to) to--;
+          var item = state.xAxis.splice(from, 1)[0];
+          state.xAxis.splice(to, 0, item);
+          dragSrcIdx = null;
+          update();
+        };
+      })(idx));
+
+      $list.append($row);
+    });
+  }
+
+  // ── render Data tab ───────────────────────────────────────────────────────
+  // Variables shown in ds.vars order; nth numeric var maps to nth xAxis slot.
+  // ▲▼ on variable rows reorders within dataset (shifts positional mapping).
+  // ▲▼ on dataset card headers reorders datasets (legend/layer order).
+  function renderDataTab() {
+    var $list = $('#ds-list').empty();
+
+    if (!state.datasets.length) {
+      $list.append($('<div style="font-size:11px;color:#45475a;padding:8px 4px;">No datasets loaded.</div>'));
+      return;
+    }
+
+    state.datasets.forEach(function (ds, dsIdx) {
+      var isExpanded = (ds.uid === state.expanded);
+      var numericCount = ds.vars.filter(function (v) { return v.numeric; }).length;
+
+      var $card = $('<div class="ds-card">').toggleClass('expanded', isExpanded).attr('data-uid', ds.uid);
+
+      // head — contains ▲▼ for dataset reorder, expand toggle, remove
+      var $head = $('<div class="ds-card-head">');
+
+      var $mv = $('<div class="mv-btns">');
+      var $up = $('<button title="Move up">').text('▲').prop('disabled', dsIdx === 0);
+      var $dn = $('<button title="Move down">').text('▼').prop('disabled', dsIdx === state.datasets.length - 1);
+      $up.on('click', function (e) { e.stopPropagation(); moveDataset(ds.uid, -1); });
+      $dn.on('click', function (e) { e.stopPropagation(); moveDataset(ds.uid,  1); });
+      $mv.append($up).append($dn);
+      $head.append($mv);
+
+      $head.append($('<div class="ds-color-dot">').css('background', ds.color));
+      $head.append($('<span class="ds-card-name" title="' + ds.name + '">').text(ds.name));
+      $head.append($('<span class="ds-card-info">').text(numericCount + ' pts'));
+      $head.append($('<span class="ds-card-expand">').text('▶'));
+
+      var $rm = $('<button class="ds-card-rm" title="Remove dataset">').html('&times;');
+      $rm.on('click', function (e) { e.stopPropagation(); removeDataset(ds.uid); });
+      $head.append($rm);
+
+      $head.on('click', function () {
+        state.expanded = isExpanded ? null : ds.uid;
+        renderDataTab();
+      });
+      $card.append($head);
+
+      // variables body — shown in ds.vars order; numeric vars have ▲▼
+      // positional mapping: nth numeric var → nth xAxis slot
+      var $vars = $('<div class="ds-card-vars">');
+      var numericSlot = 0;
+      var uid = ds.uid;
+
+      ds.vars.forEach(function (v, vidx) {
+        var $r = $('<div class="dv-row">').toggleClass('non-numeric', !v.numeric);
+
+        // drag handle (numeric vars only)
+        if (v.numeric) {
+          $r.attr('draggable', 'true');
+          $r.append($('<span class="drag-handle" title="Drag to reorder">').text('⠿'));
+        } else {
+          $r.append($('<span style="width:18px;flex-shrink:0">'));
+        }
+
+        var dotColor = v.kind === 'INPUT' ? '#4fc3f7' : '#81c784';
+        $r.append($('<span class="dv-kind-dot">').css('background', dotColor).attr('title', v.kind));
+
+        var $nm = $('<div class="dv-name">');
+        $nm.append($('<div class="dv-id">').text(getDisplayLabel(v)));
+        var valStr = v.numeric ? String(v.value) : '(non-numeric)';
+        $nm.append($('<div class="dv-val">').text(valStr));
+        $r.append($nm);
+
+        // slot badge
+        if (v.numeric) {
+          var slot = state.xAxis[numericSlot];
+          var posLabel = slot ? (slot.hidden ? slot.label + ' ○' : slot.label) : '–';
+          $r.append($('<span class="dv-xpos" title="Mapped to X axis slot">').text(posLabel));
+          numericSlot++;
+        } else {
+          $r.append($('<span class="dv-xpos">'));
+        }
+
+        // drag-and-drop events (numeric rows only)
+        if (v.numeric) {
+          (function (i) {
+            $r.on('dragstart', function (e) {
+              dragVar.uid = uid;
+              dragVar.idx = i;
+              e.originalEvent.dataTransfer.effectAllowed = 'move';
+              e.originalEvent.dataTransfer.setData('text/plain', i);
+              setTimeout(function () { $r.addClass('dragging'); }, 0);
+            });
+            $r.on('dragend', function () {
+              dragVar.uid = null; dragVar.idx = null;
+              $vars.find('.dv-row').removeClass('dragging drag-over-before drag-over-after');
+            });
+            $r.on('dragover', function (e) {
+              if (dragVar.uid !== uid) return;
+              e.preventDefault();
+              e.originalEvent.dataTransfer.dropEffect = 'move';
+              $vars.find('.dv-row').removeClass('drag-over-before drag-over-after');
+              var rect = this.getBoundingClientRect();
+              var above = e.originalEvent.clientY < rect.top + rect.height / 2;
+              $r.addClass(above ? 'drag-over-before' : 'drag-over-after');
+            });
+            $r.on('dragleave', function () {
+              $r.removeClass('drag-over-before drag-over-after');
+            });
+            $r.on('drop', function (e) {
+              e.preventDefault();
+              $vars.find('.dv-row').removeClass('drag-over-before drag-over-after');
+              if (dragVar.uid !== uid || dragVar.idx === null || dragVar.idx === i) return;
+              var rect = this.getBoundingClientRect();
+              var above = e.originalEvent.clientY < rect.top + rect.height / 2;
+              var from = dragVar.idx;
+              var to   = above ? i : i + 1;
+              if (from < to) to--;
+              var item = ds.vars.splice(from, 1)[0];
+              ds.vars.splice(to, 0, item);
+              dragVar.uid = null; dragVar.idx = null;
+              update();
+            });
+          }(vidx));
+        }
+
+        $vars.append($r);
+      });
+      $card.append($vars);
+      $list.append($card);
+    });
+  }
+
+  // ── render table ──────────────────────────────────────────────────────────
+  function renderTable() {
+    var visibleSlots = [];
+    state.xAxis.forEach(function (x, i) { if (!x.hidden) visibleSlots.push({ slot: x, idx: i }); });
+
+    var $t = $('<table id="data-table">');
+    var $head = $('<thead>').appendTo($t);
+    var $hr = $('<tr>').appendTo($head);
+    $hr.append($('<th class="dt-label-hd">').text('Variable'));
+    state.datasets.forEach(function (ds) {
+      $hr.append($('<th>').text(ds.name).css('color', ds.color));
+    });
+
+    var $body = $('<tbody>').appendTo($t);
+    visibleSlots.forEach(function (s) {
+      var $tr = $('<tr>').appendTo($body);
+      $tr.append($('<td class="dt-label">').text(s.slot.label));
+      state.datasets.forEach(function (ds) {
+        var numericVars = ds.vars.filter(function (v) { return v.numeric; });
+        var v = numericVars[s.idx];
+        $tr.append($('<td class="dt-val">').text(v !== undefined ? v.value : '–'));
+      });
+    });
+
+    $('#table-wrap').empty().append($t);
+  }
+
+  // ── render view (chart or table) ──────────────────────────────────────────
+  function renderView() {
+    if (state.plotType === 'table') {
+      $('#chart').hide();
+      $('#chart-empty').hide();
+      $('#table-wrap').show();
+      if (state.datasets.length) renderTable();
+      else $('#table-wrap').html('<div style="padding:20px;font-size:13px;color:#313244;">Load a JSON to display the table</div>');
+    } else {
+      $('#chart').show();
+      $('#table-wrap').hide();
+      renderChart();
+    }
+  }
+
+  // ── render chart ──────────────────────────────────────────────────────────
+  function renderChart() {
+    // only visible slots; remember original slot index for positional mapping
+    var visibleSlots = [];
+    state.xAxis.forEach(function (x, i) { if (!x.hidden) visibleSlots.push({ slot: x, idx: i }); });
+
+    var xLabels = visibleSlots.map(function (s) { return s.slot.label; });
+
+    var chartDatasets = state.datasets.map(function (ds) {
+      // positional mapping: nth numeric var → nth xAxis slot (by original slot index)
+      var numericVars = ds.vars.filter(function (v) { return v.numeric; });
+      var data = visibleSlots.map(function (s) {
+        return numericVars[s.idx] !== undefined ? Number(numericVars[s.idx].value) : null;
+      });
+      return {
+        label:            ds.name,
+        data:             data,
+        backgroundColor:  ds.color,
+        borderColor:      ds.color,
+        pointRadius:      8,
+        pointHoverRadius: 12,
+        pointBorderWidth: 2,
+        pointBorderColor: '#1e1e2e',
+        showLine:         state.plotType === 'line',
+        spanGaps:         false
+      };
+    });
+
+    $('#chart-empty').toggle(state.datasets.length === 0);
+
+    if (!state.chartInst) {
+      state.chartInst = new Chart(
+        document.getElementById('chart').getContext('2d'),
+        { type: 'line', data: { labels: xLabels, datasets: chartDatasets }, options: chartOptions() }
+      );
+    } else {
+      state.chartInst.data.labels   = xLabels;
+      state.chartInst.data.datasets = chartDatasets;
+      state.chartInst.update();
+    }
+  }
+
+  function chartOptions() {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300, easing: 'easeOutQuart' },
+      onHover: function (event, elements) {
+        event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
+      onClick: function (event, elements) {
+        if (!elements.length) return;
+        var el  = elements[0];
+        var ds  = state.datasets[el.datasetIndex];
+        if (!ds) return;
+        var numericVars = ds.vars.filter(function (v) { return v.numeric; });
+        // el.index is position in visible chart data; map back to original slot index
+        var visibleIdxs = [];
+        state.xAxis.forEach(function (x, i) { if (!x.hidden) visibleIdxs.push(i); });
+        var origIdx = visibleIdxs[el.index];
+        var v = origIdx !== undefined ? numericVars[origIdx] : undefined;
+        if (v) showPointInfo(ds, v);
+      },
+      plugins: {
+        legend: {
+          display: true, position: 'top',
+          labels: { color: '#a6adc8', font: { size: 12 }, usePointStyle: true, pointStyle: 'circle', padding: 18 }
+        },
+        tooltip: {
+          backgroundColor: '#313244', titleColor: '#cdd6f4', bodyColor: '#a6adc8',
+          borderColor: '#45475a', borderWidth: 1, padding: 10,
+          callbacks: {
+            title: function (items) { return items[0].label; },
+            label: function (item) { return '  ' + item.dataset.label + ':  ' + item.formattedValue; }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid:   { color: 'rgba(49,50,68,0.6)' },
+          ticks:  { color: '#a6adc8', font: { family: 'monospace', size: 12 } },
+          border: { color: '#45475a' }
+        },
+        y: {
+          grid:   { color: 'rgba(49,50,68,0.8)' },
+          ticks:  { color: '#a6adc8', font: { size: 12 } },
+          border: { color: '#45475a', dash: [4, 4] }
+        }
+      }
+    };
+  }
+
+  // ── master update ─────────────────────────────────────────────────────────
+  function update() {
+    renderPlotTab();
+    renderDataTab();
+    renderView();
+  }
+
+  // ── plot type selector ────────────────────────────────────────────────────
+  $('.pt-btn').on('click', function () {
+    state.plotType = $(this).data('type');
+    $('.pt-btn').removeClass('active');
+    $(this).addClass('active');
+    renderView();
+  });
+
+  // ── tabs ──────────────────────────────────────────────────────────────────
+  $('.tab-btn').on('click', function () {
+    var tab = $(this).data('tab');
+    $('.tab-btn').removeClass('active');
+    $('.tab-pane').removeClass('active');
+    $(this).addClass('active');
+    $('#tab-' + tab).addClass('active');
+  });
+
+  // ── add-variable button ───────────────────────────────────────────────────
+  $('#btn-add-var').on('click', function () { addXItem(); });
+
+  // ── modal ─────────────────────────────────────────────────────────────────
+  function openModal() {
+    $('#json-input').val('').removeClass('error');
+    $('#modal-error').text('');
+    $('#modal-overlay').addClass('open');
+    setTimeout(function () { $('#json-input').focus(); }, 50);
+  }
+  function closeModal() { $('#modal-overlay').removeClass('open'); }
+
+  function applyJson() {
+    var raw = $('#json-input').val().trim();
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e) {
+      $('#json-input').addClass('error');
+      $('#modal-error').text('Invalid JSON: ' + e.message);
+      return;
+    }
+    if (!parsed.variables || !parsed.operations) {
+      $('#json-input').addClass('error');
+      $('#modal-error').text('Missing "variables" and/or "operations"');
+      return;
+    }
+    addDataset(parsed);
+    closeModal();
+  }
+
+  $('#btn-load-json').on('click', openModal);
+
+  $('#btn-override-xaxis').on('click', function () {
+    if (!state.datasets.length) return;
+    var refVars = state.datasets[0].vars.filter(function (v) { return v.numeric; });
+    state.xAxis.forEach(function (slot, i) {
+      if (refVars[i]) slot.label = getDisplayLabel(refVars[i]);
+    });
+    update();
+  });
+  $('#modal-close-x, #modal-cancel').on('click', closeModal);
+  $('#modal-ok').on('click', applyJson);
+  $('#modal-overlay').on('click', function (e) { if (e.target === this) closeModal(); });
+  $('#json-input').on('keydown', function (e) {
+    if (e.ctrlKey && e.key === 'Enter') applyJson();
+    $(this).removeClass('error');
+    $('#modal-error').text('');
+  });
+
+  // ── boot: hardcoded examples/test-input-1and2.json ───────────────────────
+  var INIT = {"descriptor":{"name":"test 1&2","meta":{}},"variables":[{"track":{"id":"i_1","numericId":1,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"mc","meta":{}},"valueClass":"java.math.MathContext"},"value":{"precision":3,"roundingMode":"DOWN"}},{"track":{"id":"i_2","numericId":2,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"x","meta":{}},"valueClass":"java.math.BigDecimal"},"value":1},{"track":{"id":"i_3","numericId":3,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"y","meta":{}},"valueClass":"java.math.BigDecimal"},"value":2},{"track":{"id":"o_4","numericId":4,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"OUTPUT","descriptor":{"name":"o_4","meta":{}},"valueClass":"java.math.BigDecimal"},"value":3},{"track":{"id":"o_5","numericId":5,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"OUTPUT","descriptor":{"name":"result","meta":{}},"valueClass":"java.math.BigDecimal"},"value":-2}],"operations":[{"track":{"id":"op_1","numericId":1,"startedAt":"2026-03-14T02:09:32.1850532Z","finishedAt":"2026-03-14T02:09:32.1850532Z","descriptor":{"name":"add","meta":{"formula":"(a+b)mc"}},"wrapperClass":"io.compprov.core.wrappers.WrappedBigDecimal"},"arguments":{"a":"i_2","b":"i_3","mc":"i_1"},"resultId":"o_4"},{"track":{"id":"op_2","numericId":2,"startedAt":"2026-03-14T02:09:32.1850532Z","finishedAt":"2026-03-14T02:09:32.1850532Z","descriptor":{"name":"subtract","meta":{"formula":"(a-b)mc"}},"wrapperClass":"io.compprov.core.wrappers.WrappedBigDecimal"},"arguments":{"a":"i_2","b":"o_4","mc":"i_1"},"resultId":"o_5"}]};
+  addDataset(INIT);
+
+});
+</script>
+</body>
+</html>
