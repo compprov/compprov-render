@@ -409,6 +409,49 @@
     .info-v.muted { color: #6c7086; }
     .info-sub-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #585b70; letter-spacing: .08em; margin-top: 4px; }
 
+    /* ── extractor dialog ── */
+    #extractor-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.65); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    #extractor-overlay.open { display: flex; }
+    #extractor-modal {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 10px;
+      width: 380px; max-width: 94vw;
+      display: flex; flex-direction: column;
+      box-shadow: 0 10px 48px rgba(0,0,0,.7); overflow: hidden;
+    }
+    #extractor-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #313244; }
+    #extractor-header h3 { flex: 1; font-size: 13px; font-weight: 700; color: #cdd6f4; }
+    #extractor-close-x { background: none; border: none; color: #6c7086; font-size: 18px; cursor: pointer; padding: 0 3px; }
+    #extractor-close-x:hover { color: #cdd6f4; }
+    #extractor-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+    #extractor-class { font-size: 10px; color: #585b70; font-family: monospace; word-break: break-all; }
+    #extractor-fields { display: flex; flex-direction: column; gap: 2px; }
+    .extractor-field-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 5px 6px; border-radius: 5px; cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .extractor-field-row:hover { background: #252535; border-color: #313244; }
+    .extractor-field-row.non-numeric-field { opacity: .35; pointer-events: none; }
+    .extractor-field-key { font-family: monospace; font-size: 12px; color: #89b4fa; min-width: 80px; flex-shrink: 0; }
+    .extractor-field-val { font-family: monospace; font-size: 11px; color: #a6adc8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #extractor-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #313244; }
+    .radio-chk {
+      appearance: none; -webkit-appearance: none;
+      width: 13px; height: 13px;
+      border: 1px solid #585b70; border-radius: 50%;
+      background: #1e1e2e; flex-shrink: 0; cursor: pointer; position: relative;
+    }
+    .radio-chk:checked { background: #89b4fa; border-color: #89b4fa; }
+    .radio-chk:checked::after {
+      content: ''; position: absolute;
+      left: 3px; top: 3px; width: 5px; height: 5px;
+      border-radius: 50%; background: #1e1e2e;
+    }
+
     /* ── modal ── */
     #modal-overlay {
       display: none; position: fixed; inset: 0;
@@ -528,6 +571,24 @@
   </div>
 </div>
 
+<!-- extractor dialog -->
+<div id="extractor-overlay">
+  <div id="extractor-modal">
+    <div id="extractor-header">
+      <h3>Extract numeric value</h3>
+      <button id="extractor-close-x">×</button>
+    </div>
+    <div id="extractor-body">
+      <div id="extractor-class"></div>
+      <div id="extractor-fields"></div>
+    </div>
+    <div id="extractor-footer">
+      <button class="modal-btn" id="extractor-cancel" style="background:#313244;border-color:#45475a;color:#a6adc8;">Cancel</button>
+      <button class="modal-btn" id="extractor-ok" style="background:#89b4fa;color:#1e1e2e;">Apply to all</button>
+    </div>
+  </div>
+</div>
+
 <script>
 $(function () {
 
@@ -545,7 +606,8 @@ $(function () {
     uidCounter:   0,
     chartInst:    null,
     displayField: null,   // field name used as display label; null = 'id'
-    plotType:     'points' // 'points' | 'line' | 'table'
+    plotType:     'points', // 'points' | 'line' | 'table'
+    extractors:   {}      // valueClass → fieldName for numeric extraction
   };
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -601,16 +663,30 @@ $(function () {
     var color = PALETTE[(state.datasets.length) % PALETTE.length];
 
     var vars = (json.variables || []).map(function (v) {
+      var rawVal = v.value;
+      var vc     = v.track.valueClass;
+      var parsed = (typeof rawVal === 'string' && rawVal.trim() !== '' && !isNaN(Number(rawVal)))
+                     ? Number(rawVal) : rawVal;
+      var effective = parsed;
+      if (vc && state.extractors[vc] && typeof parsed === 'object' && parsed !== null) {
+        var f = state.extractors[vc];
+        if (parsed[f] !== undefined) {
+          var cand = parsed[f];
+          if (typeof cand === 'string' && cand.trim() !== '' && !isNaN(Number(cand))) cand = Number(cand);
+          if (isNumeric(cand)) effective = cand;
+        }
+      }
       return {
         id:         v.track.id,
         numericId:  v.track.numericId,
         kind:       v.track.kind,
         name:       v.track.descriptor.name,
-        valueClass: v.track.valueClass,
+        valueClass: vc,
         createdAt:  v.track.createdAt,
         meta:       v.track.descriptor.meta || {},
-        value:      v.value,
-        numeric:    isNumeric(v.value)
+        rawValue:   rawVal,
+        value:      effective,
+        numeric:    isNumeric(effective)
       };
     });
 
@@ -926,7 +1002,10 @@ $(function () {
 
         var $nm = $('<div class="dv-name">');
         $nm.append($('<div class="dv-id">').text(getDisplayLabel(v)));
-        var valStr = v.numeric ? String(v.value) : '(non-numeric)';
+        var valStr = v.numeric ? String(v.value)
+          : (typeof v.rawValue === 'object' && v.rawValue !== null)
+            ? '{' + Object.keys(v.rawValue).join(', ') + '}'
+            : '(non-numeric)';
         $nm.append($('<div class="dv-val">').text(valStr));
         $r.append($nm);
 
@@ -938,6 +1017,12 @@ $(function () {
           numericSlot++;
         } else {
           $r.append($('<span class="dv-xpos">'));
+        }
+
+        // dblclick on non-numeric object rows → extractor dialog
+        if (!v.numeric && typeof v.rawValue === 'object' && v.rawValue !== null) {
+          $r.attr('title', 'Double-click to configure numeric extraction');
+          $r.on('dblclick', function () { openExtractorDialog(v); });
         }
 
         // drag-and-drop events (numeric rows only)
@@ -1150,6 +1235,76 @@ $(function () {
 
   // ── add-variable button ───────────────────────────────────────────────────
   $('#btn-add-var').on('click', function () { addXItem(); });
+
+  // ── extractor dialog ──────────────────────────────────────────────────────
+  var extractorCtx = { valueClass: null };
+
+  function openExtractorDialog(v) {
+    if (typeof v.rawValue !== 'object' || v.rawValue === null) return;
+    extractorCtx.valueClass = v.valueClass;
+
+    $('#extractor-header h3').text('Extract numeric: ' + shortClass(v.valueClass));
+    $('#extractor-class').text(v.valueClass);
+
+    var $fields = $('#extractor-fields').empty();
+    var current = state.extractors[v.valueClass] || null;
+
+    Object.keys(v.rawValue).forEach(function (key) {
+      var val = v.rawValue[key];
+      var cand = val;
+      if (typeof cand === 'string' && cand.trim() !== '' && !isNaN(Number(cand))) cand = Number(cand);
+      var canExtract = isNumeric(cand);
+
+      var $row = $('<label class="extractor-field-row">').toggleClass('non-numeric-field', !canExtract);
+      var $radio = $('<input type="radio" class="radio-chk" name="extractor-field">').val(key);
+      if (current === key) $radio.prop('checked', true);
+      $row.append($radio);
+      $row.append($('<span class="extractor-field-key">').text(key));
+      $row.append($('<span class="extractor-field-val">').text(String(val)));
+      $fields.append($row);
+    });
+
+    $('#extractor-overlay').addClass('open');
+  }
+
+  function applyExtractor() {
+    var selected = $('#extractor-fields input[name="extractor-field"]:checked').val();
+    if (!selected) { closeExtractorDialog(); return; }
+    var vc = extractorCtx.valueClass;
+    state.extractors[vc] = selected;
+
+    state.datasets.forEach(function (ds) {
+      ds.vars.forEach(function (v) {
+        if (v.valueClass !== vc || typeof v.rawValue !== 'object' || v.rawValue === null) return;
+        if (v.rawValue[selected] === undefined) return;
+        var cand = v.rawValue[selected];
+        if (typeof cand === 'string' && cand.trim() !== '' && !isNaN(Number(cand))) cand = Number(cand);
+        if (isNumeric(cand)) { v.value = cand; v.numeric = true; }
+      });
+    });
+
+    // extend xAxis for any newly numeric vars
+    var maxNumeric = 0;
+    state.datasets.forEach(function (ds) {
+      var n = ds.vars.filter(function (v) { return v.numeric; }).length;
+      if (n > maxNumeric) maxNumeric = n;
+    });
+    while (state.xAxis.length < maxNumeric) {
+      var refDs   = state.datasets[0];
+      var refVars = refDs ? refDs.vars.filter(function (v) { return v.numeric; }) : [];
+      var slot    = refVars[state.xAxis.length];
+      state.xAxis.push({ label: slot ? getDisplayLabel(slot) : ('slot ' + (state.xAxis.length + 1)), hidden: false });
+    }
+
+    closeExtractorDialog();
+    update();
+  }
+
+  function closeExtractorDialog() { $('#extractor-overlay').removeClass('open'); }
+
+  $('#extractor-close-x, #extractor-cancel').on('click', closeExtractorDialog);
+  $('#extractor-ok').on('click', applyExtractor);
+  $('#extractor-overlay').on('click', function (e) { if (e.target === this) closeExtractorDialog(); });
 
   // ── modal ─────────────────────────────────────────────────────────────────
   function openModal() {
