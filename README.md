@@ -2,7 +2,9 @@
 
 Visualization renderer for [compprov](https://github.com/compprov) — interactive browser-based views for **Calculation Provenance Graph (CPG)** data produced by [compprov-core](https://github.com/compprov/compprov-core).
 
-Opens directly from the local filesystem (no server required).
+Opens directly from the local filesystem (no server required). Or you can try it out here:
+ - https://compprov.io/plot.html
+ - https://compprov.io/graph.html
 
 ---
 
