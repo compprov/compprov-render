@@ -683,7 +683,7 @@ $(function () {
         name:       v.track.descriptor.name,
         valueClass: vc,
         createdAt:  v.track.createdAt,
-        meta:       v.track.descriptor.meta || {},
+        meta:       normalizeMeta(v.track.descriptor.meta),
         rawValue:   rawVal,
         value:      effective,
         numeric:    isNumeric(effective)
@@ -782,6 +782,16 @@ $(function () {
 
   function shortDate(s) {
     return s ? s.replace('T', ' ').replace(/\.\d+Z$/, ' Z') : '';
+  }
+
+  function normalizeMeta(m) {
+    if (!m) return {};
+    if (Array.isArray(m)) {
+      var o = {};
+      m.forEach(function (e) { o[e.key] = e.value; });
+      return o;
+    }
+    return m;
   }
 
   function showPointInfo(ds, v) {
