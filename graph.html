@@ -495,6 +495,8 @@ $(function () {
   // ── inline data (examples/input1.json) ───────────────────────────────────
   const DATA = {"descriptor":{"name":"test","meta":{}},"variables":[{"track":{"id":"i_1","numericId":1,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"mc","meta":{}},"valueClass":"java.math.MathContext"},"value":{"precision":3,"roundingMode":"DOWN"}},{"track":{"id":"i_2","numericId":2,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"x","meta":{}},"valueClass":"java.math.BigDecimal"},"value":1},{"track":{"id":"i_3","numericId":3,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"INPUT","descriptor":{"name":"y","meta":{}},"valueClass":"java.math.BigDecimal"},"value":2},{"track":{"id":"o_4","numericId":4,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"OUTPUT","descriptor":{"name":"o_4","meta":{}},"valueClass":"java.math.BigDecimal"},"value":3},{"track":{"id":"o_5","numericId":5,"createdAt":"2026-03-14T02:09:32.1850532Z","kind":"OUTPUT","descriptor":{"name":"result","meta":{}},"valueClass":"java.math.BigDecimal"},"value":-2}],"operations":[{"track":{"id":"op_1","numericId":1,"startedAt":"2026-03-14T02:09:32.1850532Z","finishedAt":"2026-03-14T02:09:32.1850532Z","descriptor":{"name":"add","meta":{"formula":"(a+b)mc"}},"wrapperClass":"io.compprov.core.wrappers.WrappedBigDecimal"},"arguments":{"a":"i_2","b":"i_3","mc":"i_1"},"resultId":"o_4"},{"track":{"id":"op_2","numericId":2,"startedAt":"2026-03-14T02:09:32.1850532Z","finishedAt":"2026-03-14T02:09:32.1850532Z","descriptor":{"name":"subtract","meta":{"formula":"(a-b)mc"}},"wrapperClass":"io.compprov.core.wrappers.WrappedBigDecimal"},"arguments":{"a":"i_2","b":"o_4","mc":"i_1"},"resultId":"o_5"}]};
 
+  normalizeData(DATA);
+
   // ── state ─────────────────────────────────────────────────────────────────
   let nodesDS, edgesDS, network;
 
@@ -513,6 +515,31 @@ $(function () {
   function shortDate(s) {
     if (!s) return '';
     return s.replace('T', ' ').replace(/\.\d+Z$/, ' Z');
+  }
+
+  function normalizeMeta(m) {
+    if (!m) return {};
+    if (Array.isArray(m)) {
+      var o = {};
+      m.forEach(function (e) { o[e.key] = e.value; });
+      return o;
+    }
+    return m;
+  }
+
+  function normalizeData(d) {
+    if (d.descriptor) d.descriptor.meta = normalizeMeta(d.descriptor.meta);
+    (d.variables || []).forEach(function (v) {
+      v.track.descriptor.meta = normalizeMeta(v.track.descriptor.meta);
+    });
+    (d.operations || []).forEach(function (op) {
+      op.track.descriptor.meta = normalizeMeta(op.track.descriptor.meta);
+      if (Array.isArray(op.arguments)) {
+        var a = {};
+        op.arguments.forEach(function (e) { a[e.key] = e.value; });
+        op.arguments = a;
+      }
+    });
   }
 
   function fields(cls) {
@@ -844,6 +871,7 @@ $(function () {
     parsed.operations.forEach(function (op) { opById[op.track.id] = op; });
 
     // swap DATA contents in-place so all references stay valid
+    normalizeData(parsed);
     DATA.descriptor = parsed.descriptor || { name: 'untitled', meta: {} };
     DATA.variables   = parsed.variables;
     DATA.operations  = parsed.operations;
